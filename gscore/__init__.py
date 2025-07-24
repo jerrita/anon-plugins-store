@@ -120,7 +120,7 @@ class GSCoreAdapter(Plugin):
         try:
             self.ws = await websockets.connect(self.gscore_url)
         except Exception as e:
-            self._reconnect()
+            await self._reconnect()
         logger.info('[GSCore] Loaded!')
         PluginManager().create_task(self._looper())
 
@@ -129,7 +129,7 @@ class GSCoreAdapter(Plugin):
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
             logger.warning(f'GSCoreAdapter Send Error: {e}')
-            self._reconnect()
+            await self._reconnect()
 
 
 PluginManager().register_plugin(GSCoreAdapter([MessageEvent],
