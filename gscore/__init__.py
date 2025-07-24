@@ -1,6 +1,6 @@
-from anon import PluginManager, Plugin, Bot, logger, Permission
+from anon import PluginManager, Plugin, Bot, logger, Permission, Storage
 from anon.common import AnonExtraConfig
-from anon.message import Text, Image, At, Reply, Message
+from anon.message import Text, Image, At, Reply, Message, Node, Forward
 from anon.event import MessageEvent, GroupMessage, PrivateMessage
 
 PluginManager().add_requirements(["msgspec~=0.19"])
@@ -11,6 +11,7 @@ import msgspec
 from websockets import WebSocketClientProtocol
 from .models import *
 
+store = Storage('gscore')
 
 def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
     res = MessageReceive(
@@ -52,8 +53,9 @@ def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
     return res
 
 
-def gscore_to_msg(content: List[GSMessage]) -> Message:
+def gscore_to_msg(content: List[GSMessage]) -> Tuple[Message, Optional[Forward]]:
     res = Message()
+    fwd = None
     for i in content:
         match i.type:
             case 'text':
@@ -69,16 +71,37 @@ def gscore_to_msg(content: List[GSMessage]) -> Message:
                 res.append(At(int(i.data)))
             case 'reply':
                 res.append(Reply(int(i.data)))
+            case 'node':
+                if not isinstance(fwd, Forward):
+                    fwd = Forward(source='群聊的聊天记录', news=[])
+                nick_name = store.get_or('nickname', '小助手')
+                cnt = 0
+                for node in i.data:
+                    cnt += 1
+                    i = Text(f'<unsupp: {node['type']} in node>')
+                    match node['type']:
+                        case 'text':
+                            i = Text(node['data'])
+                            fwd.news.append({'text': f'{nick_name}: {node['data']}'})
+                        case 'image':
+                            if node['data'].startswith('link://'):
+                                i = Image(node['data'][7:])
+                            else:
+                                i = Image(node['data'])
+                    fwd.append(Node(Message([i]), 
+                                    user_id=store.get_or('user_id', 10001000),
+                                    nick_name=nick_name))
+                fwd.summary = f'查看{cnt}条转发消息'
             case 'group':
                 continue
             case _:
                 logger.debug(f'[GSUnsup] {i}')
                 res.append(Text(f'<unsup: {i.type}>'))
-    return res
+    return (res, fwd)
 
 
 class GSCoreAdapter(Plugin):
-    gscore_url: str = 'ws://localhost:8765/ws/anon'
+    gscore_url: str = store.get_or('url', 'ws://localhost:8765/ws/anon')
     ws: WebSocketClientProtocol = None
 
     async def _looper(self):
@@ -91,14 +114,22 @@ class GSCoreAdapter(Plugin):
                     logger.info(f'[GSCore] [{seek.type}] {seek.data}')
                     continue
 
-                msg = gscore_to_msg(send.content)
+                msg, fwd = gscore_to_msg(send.content)
                 if send.target_type == 'group':
-                    await Bot().send_group_message(int(send.target_id), msg)
+                    if fwd:
+                        fwd.group_id = int(send.target_id)
+                    else:
+                        await Bot().send_group_message(int(send.target_id), msg)
                 elif send.target_type == 'direct':
-                    await Bot().send_private_message(int(send.target_id), msg)
+                    if fwd:
+                        fwd.user_id = int(send.target_id)
+                    else:
+                        await Bot().send_private_message(int(send.target_id), msg)
                 else:
                     logger.warning(
                         f'[GSCore] unsupported send type: {send.target_type}')
+                if fwd:
+                    await Bot().napcat_send_forward_msg(fwd)
             except Exception as e:
                 logger.warning(f'GSCore recv error: {e}')
                 await self._reconnect()
@@ -128,7 +159,6 @@ class GSCoreAdapter(Plugin):
         except Exception as e:
             logger.warning(f'GSCoreAdapter Send Error: {e}')
             await self._reconnect()
-
 
 PluginManager().register_plugin(GSCoreAdapter([MessageEvent],
                                               white_list=True,
