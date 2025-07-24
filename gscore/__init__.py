@@ -3,13 +3,14 @@ from anon.common import AnonExtraConfig
 from anon.message import Text, Image, At, Reply, Message
 from anon.event import MessageEvent, GroupMessage, PrivateMessage
 
+PluginManager().add_requirements(["msgspec~=0.19"])
+
 import websockets
 import msgspec
 import time
 
 from websockets import ConnectionClosedError, WebSocketClientProtocol
 from .models import *
-
 
 def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
     res = MessageReceive(
@@ -76,7 +77,7 @@ def gscore_to_msg(content: List[GSMessage]) -> Message:
 class GSCoreAdapter(Plugin):
     gscore_url: str = 'ws://localhost:8765/ws/anon'
     ws: WebSocketClientProtocol
-    requirements = ["msgspec~=0.19"]
+    failed: bool = False
 
     async def _looper(self):
         while True:
@@ -108,11 +109,14 @@ class GSCoreAdapter(Plugin):
         try:
             self.ws = await websockets.connect(self.gscore_url)
             logger.info('[GSCore] Loaded!')
+            await self._looper()
         except Exception as e:
             await Bot().send_private_message(self.extras.owner[0], f"GSCoreAdapter Failed: {e}")
-        await self._looper()
+            self.failed = True
 
     async def on_event(self, event: MessageEvent):
+        if self.failed:
+            return
         try:
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
