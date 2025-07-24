@@ -8,7 +8,7 @@ PluginManager().add_requirements(["msgspec~=0.19"])
 import websockets
 import msgspec
 
-from websockets import ConnectionClosedError, WebSocketClientProtocol
+from websockets import WebSocketClientProtocol
 from .models import *
 
 
@@ -45,7 +45,10 @@ def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
         else:
             res.content.append(GSMessage('text', '<unsupp>'))
 
-    res.sender = msg.sender.data()
+    res.sender = {
+        'nickname': msg.sender.nickname,
+        'avatar': f'http://q.qlogo.cn/headimg_dl?dst_uin={msg.sender.user_id}&spec=640&img_type=jpg'
+    }
     return res
 
 
@@ -118,6 +121,8 @@ class GSCoreAdapter(Plugin):
         PluginManager().create_task(self._looper())
 
     async def on_event(self, event: MessageEvent):
+        if 'ww刷新面板' in event.msg.text_only:
+            await event.reply('请使用 ww刷新<角色>面板！')
         try:
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
@@ -126,6 +131,5 @@ class GSCoreAdapter(Plugin):
 
 
 PluginManager().register_plugin(GSCoreAdapter([MessageEvent],
-                                              perm=Permission.Owner,
                                               white_list=True,
                                               groups=AnonExtraConfig().dev_groups))
