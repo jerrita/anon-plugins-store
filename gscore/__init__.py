@@ -7,7 +7,6 @@ PluginManager().add_requirements(["msgspec~=0.19"])
 
 import websockets
 import msgspec
-import time
 
 from websockets import ConnectionClosedError, WebSocketClientProtocol
 from .models import *
@@ -97,13 +96,9 @@ class GSCoreAdapter(Plugin):
                 else:
                     logger.warning(
                         f'[GSCore] unsupported send type: {send.target_type}')
-            except ConnectionClosedError:
-                logger.warning('GSCore WS Closed. Reconnecting...')
-                self.ws = await websockets.connect(self.gscore_url)
-                time.sleep(5)
             except Exception as e:
                 logger.warning(f'GSCore recv error: {e}')
-                time.sleep(5)
+                await self._reconnect()
 
     async def _reconnect(self):
         while True:
@@ -114,7 +109,7 @@ class GSCoreAdapter(Plugin):
                 break
             except Exception as e:
                 logger.warning(f'GSCore reconnect error: {e}')
-                time.sleep(5)
+                await asyncio.sleep(5)
 
     async def on_load(self):
         try:
