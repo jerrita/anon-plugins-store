@@ -154,6 +154,7 @@ class GSCoreAdapter(Plugin):
     async def on_event(self, event: MessageEvent):
         if 'ww刷新面板' in event.msg.text_only:
             await event.reply('请使用 ww刷新<角色>面板！')
+            return
         try:
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
