@@ -12,6 +12,7 @@ import time
 from websockets import ConnectionClosedError, WebSocketClientProtocol
 from .models import *
 
+
 def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
     res = MessageReceive(
         bot_id='Anon',
@@ -77,7 +78,6 @@ def gscore_to_msg(content: List[GSMessage]) -> Message:
 class GSCoreAdapter(Plugin):
     gscore_url: str = 'ws://localhost:8765/ws/anon'
     ws: WebSocketClientProtocol
-    failed: bool = False
 
     async def _looper(self):
         while True:
@@ -105,22 +105,31 @@ class GSCoreAdapter(Plugin):
                 logger.warning(f'GSCore recv error: {e}')
                 time.sleep(5)
 
+    async def _reconnect(self):
+        while True:
+            try:
+                if self.ws is None or self.ws.closed:
+                    self.ws = await websockets.connect(self.gscore_url)
+                    logger.info('[GSCore] Reconnected!')
+                break
+            except Exception as e:
+                logger.warning(f'GSCore reconnect error: {e}')
+                time.sleep(5)
+
     async def on_load(self):
         try:
             self.ws = await websockets.connect(self.gscore_url)
-            logger.info('[GSCore] Loaded!')
-            await self._looper()
         except Exception as e:
-            await Bot().send_private_message(self.extras.owner[0], f"GSCoreAdapter Failed: {e}")
-            self.failed = True
+            self._reconnect()
+        logger.info('[GSCore] Loaded!')
+        PluginManager().create_task(self._looper())
 
     async def on_event(self, event: MessageEvent):
-        if self.failed:
-            return
         try:
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
-            logger.error(f'GSCoreAdapter Send Error: {e}')
+            logger.warning(f'GSCoreAdapter Send Error: {e}')
+            self._reconnect()
 
 
 PluginManager().register_plugin(GSCoreAdapter([MessageEvent],
