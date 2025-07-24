@@ -104,7 +104,8 @@ class GSCoreAdapter(Plugin):
         while True:
             try:
                 if self.ws is None or self.ws.closed:
-                    self.ws = await websockets.connect(self.gscore_url)
+                    self.ws = await websockets.connect(self.gscore_url,
+                                                       max_size=2**26, open_timeout=60, ping_timeout=60)
                     logger.info('[GSCore] Reconnected!')
                 break
             except Exception as e:
@@ -112,10 +113,7 @@ class GSCoreAdapter(Plugin):
                 await asyncio.sleep(5)
 
     async def on_load(self):
-        try:
-            self.ws = await websockets.connect(self.gscore_url)
-        except Exception as e:
-            await self._reconnect()
+        await self._reconnect()
         logger.info('[GSCore] Loaded!')
         PluginManager().create_task(self._looper())
 
