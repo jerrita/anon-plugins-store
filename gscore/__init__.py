@@ -76,7 +76,7 @@ def gscore_to_msg(content: List[GSMessage]) -> Message:
 
 class GSCoreAdapter(Plugin):
     gscore_url: str = 'ws://localhost:8765/ws/anon'
-    ws: WebSocketClientProtocol
+    ws: WebSocketClientProtocol = None
 
     async def _looper(self):
         while True:
