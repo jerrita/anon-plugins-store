@@ -56,6 +56,7 @@ def msg_to_gscore(msg: MessageEvent) -> MessageReceive:
 def gscore_to_msg(content: List[GSMessage]) -> Tuple[Message, Optional[Forward]]:
     res = Message()
     fwd = None
+    cnt = 0
     for i in content:
         match i.type:
             case 'text':
@@ -72,10 +73,9 @@ def gscore_to_msg(content: List[GSMessage]) -> Tuple[Message, Optional[Forward]]
             case 'reply':
                 res.append(Reply(int(i.data)))
             case 'node':
-                if not isinstance(fwd, Forward):
-                    fwd = Forward(source='群聊的聊天记录', news=[])
+                if fwd is None:
+                    fwd = Forward(source='群聊的聊天记录', prompt='合并消息')
                 nick_name = store.get_or('nickname', '小助手')
-                cnt = 0
                 for node in i.data:
                     cnt += 1
                     i = Text(f'<unsupp: {node['type']} in node>')
