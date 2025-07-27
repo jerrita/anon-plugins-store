@@ -104,6 +104,11 @@ class GSCoreAdapter(Plugin):
     gscore_url: str = store.get_or('url', 'ws://localhost:8765/ws/anon')
     ws: WebSocketClientProtocol = None
 
+    def __init__(self, white_list=True, groups=[], **kwargs):
+        self.white_list = white_list
+        self.groups = groups
+        super().__init__([MessageEvent], **kwargs)
+
     async def _looper(self):
         while True:
             try:
@@ -149,18 +154,16 @@ class GSCoreAdapter(Plugin):
     async def on_load(self):
         await self._reconnect()
         logger.info('[GSCore] Loaded!')
+        logger.info(f'[GSCore] Activated groups: {self.groups}')
+        logger.info(f'[GSCore] Whitelist mode: {self.white_list}')
         PluginManager().create_task(self._looper())
 
     async def on_event(self, event: MessageEvent):
-        if 'ww刷新面板' in event.msg.text_only:
-            await event.reply('请使用 ww刷新<角色>面板！')
-            return
         try:
             await self.ws.send(msgspec.json.encode(msg_to_gscore(event)))
         except Exception as e:
             logger.warning(f'GSCoreAdapter Send Error: {e}')
             await self._reconnect()
 
-PluginManager().register_plugin(GSCoreAdapter([MessageEvent],
-                                              white_list=True,
+PluginManager().register_plugin(GSCoreAdapter(white_list=True,
                                               groups=AnonExtraConfig().dev_groups))
